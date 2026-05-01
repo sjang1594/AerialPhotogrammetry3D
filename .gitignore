@@ -1,0 +1,80 @@
+# ── Python ───────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.Python
+build/
+dist/
+develop-eggs/
+downloads/
+wheels/
+*.whl
+
+# ── Virtual environments ─────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# ── Jupyter ──────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ── IDE / Editor ─────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Pipeline outputs ─────────────────────────────────────────────────────
+outputs/
+*.log
+
+# ── Generated synthetic data ─────────────────────────────────────────────
+data/synthetic/
+
+# ── Real aerial datasets (large binary assets) ───────────────────────────
+data/aerial/*/images/
+data/aerial/*/odm_*/
+data/aerial/*/.ddb/
+data/aerial/*/*.laz
+data/aerial/*/*.tif
+data/aerial/*/*.ply
+data/aerial/*/*.mvs
+data/aerial/*/*.webp
+
+# ── Common large 3D / imagery formats anywhere ───────────────────────────
+*.ply
+*.obj
+*.mtl
+*.laz
+*.las
+*.tif
+*.tiff
+*.npy
+*.npz
+*.pkl
+*.h5
+
+# ── Models / weights ─────────────────────────────────────────────────────
+*.pt
+*.pth
+*.ckpt
+*.onnx
+weights/
+checkpoints/
+
+# ── OS / misc ────────────────────────────────────────────────────────────
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
