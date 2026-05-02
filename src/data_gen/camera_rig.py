@@ -203,3 +203,41 @@ def render_scene(scene_mesh: o3d.geometry.TriangleMesh,
 
     print(f"[data_gen] Rendered {len(cameras)} images → {img_dir}")
     return img_dir, depth_dir, poses_path
+
+
+def render_overview(scene_mesh: o3d.geometry.TriangleMesh,
+                    cameras: list = None,
+                    eye=(50.0, -40.0, 120.0),
+                    target=(50.0, 50.0, 5.0),
+                    fov_deg: float = 80.0,
+                    w: int = 1200,
+                    h: int = 900,
+                    marker_size: float = 2.0,
+                    marker_color=(1.0, 0.1, 0.1)):
+    """
+    Render a single wide-angle 3rd-person overview of the whole scene using the
+    same software rasterizer.  If `cameras` is given, small colored cubes are
+    added at each camera position so the rig is visible in the overview.
+
+    Returns (color H×W×3 uint8 RGB, depth H×W float32 metres).
+    """
+    combined = o3d.geometry.TriangleMesh()
+    combined += scene_mesh
+
+    if cameras is not None:
+        s = marker_size
+        for cam in cameras:
+            e = np.array(cam["eye"], dtype=float)
+            marker = o3d.geometry.TriangleMesh.create_box(width=s, height=s, depth=s)
+            marker.translate(e - np.array([s/2, s/2, s/2]))
+            marker.paint_uniform_color(list(marker_color))
+            marker.compute_vertex_normals()
+            combined += marker
+
+    combined.compute_vertex_normals()
+
+    K = _intrinsic_matrix(w, h, fov_deg)
+    E = _lookat(np.array(eye, dtype=float), np.array(target, dtype=float))
+    R, t = E[:3, :3], E[:3, 3]
+
+    return _software_render(combined, R, t, K, w, h)

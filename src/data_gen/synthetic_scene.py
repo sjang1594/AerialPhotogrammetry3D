@@ -6,11 +6,21 @@ import numpy as np
 import open3d as o3d
 
 
-def _box_mesh(cx, cy, w, d, h, color):
-    """Axis-aligned box centered at (cx,cy,0), height h, RGBA color."""
+def _box_mesh(cx, cy, w, d, h, color, subdivisions: int = 4, noise: float = 0.12,
+              seed: int = 0):
+    """Axis-aligned box centered at (cx,cy,0), height h, base RGB color.
+    """
     mesh = o3d.geometry.TriangleMesh.create_box(width=w, height=d, depth=h)
     mesh.translate([-w/2 + cx, -d/2 + cy, 0.0])
+    if subdivisions > 0:
+        mesh = mesh.subdivide_midpoint(number_of_iterations=subdivisions)
     mesh.paint_uniform_color(color)
+
+    rng = np.random.default_rng(seed)
+    base = np.asarray(mesh.vertex_colors)
+    jitter = rng.normal(0.0, noise, size=base.shape)
+    mesh.vertex_colors = o3d.utility.Vector3dVector(np.clip(base + jitter, 0.0, 1.0))
+
     mesh.compute_vertex_normals()
     return mesh
 
@@ -24,8 +34,9 @@ def build_scene(n_buildings: int = 15, seed: int = 42) -> o3d.geometry.TriangleM
     rng = np.random.default_rng(seed)
     meshes = []
 
-    # Ground plane as a thin box
-    ground = _box_mesh(50, 50, 100, 100, 0.1, [0.5, 0.5, 0.5])
+    # Ground plane as a thin box (more subdivisions → finer texture for SIFT)
+    ground = _box_mesh(50, 50, 100, 100, 0.1, [0.5, 0.5, 0.5],
+                       subdivisions=6, noise=0.20, seed=int(rng.integers(1 << 30)))
     meshes.append(ground)
 
     building_colors = [
@@ -43,7 +54,9 @@ def build_scene(n_buildings: int = 15, seed: int = 42) -> o3d.geometry.TriangleM
         d  = rng.uniform(4, 15)
         h  = rng.uniform(5, 30)
         color = building_colors[i % len(building_colors)]
-        meshes.append(_box_mesh(cx, cy, w, d, h, color))
+        meshes.append(_box_mesh(cx, cy, w, d, h, color,
+                                subdivisions=5, noise=0.22,
+                                seed=int(rng.integers(1 << 30))))
 
     # Merge all
     scene = meshes[0]
