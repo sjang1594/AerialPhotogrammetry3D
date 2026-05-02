@@ -17,7 +17,8 @@ def detect_features(images: List[np.ndarray], nfeatures: int = 4096) -> List[Ima
     Detect SIFT keypoints + descriptors for each image.
     Returns list of ImageFeatures (one per image).
     """
-    sift = cv2.SIFT_create(nfeatures=nfeatures)
+    sift = cv2.SIFT_create(nfeatures=nfeatures, contrastThreshold=0.015,
+                           edgeThreshold=15)
     results = []
     for i, img in enumerate(images):
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img

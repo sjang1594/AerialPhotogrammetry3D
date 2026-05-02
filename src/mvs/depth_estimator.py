@@ -92,8 +92,8 @@ def compute_depth_map(img_i: np.ndarray, img_j: np.ndarray,
 
     z = rays_rect[:, :, 2]
     z = np.where(np.abs(z) < 1e-6, 1e-6, z)
-    map_back_x = (rays_rect[:, :, 0] / z) * P1[0, 0] + P1[0, 2]
-    map_back_y = (rays_rect[:, :, 1] / z) * P1[1, 1] + P1[1, 2]
+    map_back_x = ((rays_rect[:, :, 0] / z) * P1[0, 0] + P1[0, 2]).astype(np.float32)
+    map_back_y = ((rays_rect[:, :, 1] / z) * P1[1, 1] + P1[1, 2]).astype(np.float32)
 
     depth_orig = cv2.remap(depth, map_back_x, map_back_y, cv2.INTER_NEAREST)
     return depth_orig.astype(np.float32)
