@@ -160,6 +160,45 @@ def _software_render(mesh: o3d.geometry.TriangleMesh,
             buf_ch = color_buf[y0:y1+1, x0:x1+1, ch]
             buf_ch[update] = c_px[update]
 
+    # ------------------------------------------------------------------
+    # Pass 2 — view-independent procedural texture.
+    # Back-project every populated pixel to world XYZ using its z-buffer
+    # depth, then modulate brightness by a hash-noise of world coordinates.
+    # The noise is a deterministic function of 3D position, so the same
+    # surface point gets the same colour from every camera — required for
+    # photometric consistency in dense stereo (SGBM).
+    # ------------------------------------------------------------------
+    valid = ~np.isinf(depth_buf)
+    if np.any(valid):
+        v_grid, u_grid = np.mgrid[0:H, 0:W].astype(np.float64)
+        Zd = np.where(valid, depth_buf, 1.0)            # positive depth
+        Xc = (u_grid + 0.5 - K[0, 2]) * Zd / K[0, 0]
+        Yc = (v_grid + 0.5 - K[1, 2]) * Zd / K[1, 1]
+        Zc = -Zd                                        # camera convention
+        cam_pts = np.stack([Xc, Yc, Zc], axis=-1)       # H×W×3
+
+        Rinv = R.T
+        world = cam_pts @ Rinv.T - (Rinv @ t)           # H×W×3
+
+        wx, wy, wz = world[..., 0], world[..., 1], world[..., 2]
+        # Cell-quantized hash noise — each cell of side `cell_size` (metres)
+        # gets one random brightness value. Spatial coherence (≈ several
+        # pixels per cell) is what SIFT/SGBM need: distinctive local patches
+        # whose appearance is identical from any camera. Two octaves combine
+        # a coarse pattern with a fine one for richer descriptors.
+        def _cell_hash(x, y, z, cell):
+            ix = np.floor(x / cell).astype(np.int64)
+            iy = np.floor(y / cell).astype(np.int64)
+            iz = np.floor(z / cell).astype(np.int64)
+            h  = (ix * 73856093) ^ (iy * 19349663) ^ (iz * 83492791)
+            return (h & 0xFFFFFF).astype(np.float64) / float(0xFFFFFF)
+
+        n1 = _cell_hash(wx, wy, wz, cell=0.60)   # ~8 px cells
+        n2 = _cell_hash(wx, wy, wz, cell=2.00)   # ~28 px cells
+        mod = 0.55 + 0.9 * (0.55 * n1 + 0.45 * n2)        # ≈ [0.55, 1.45]
+
+        color_buf[valid] = np.clip(color_buf[valid] * mod[valid, None], 0.0, 1.0)
+
     color_img = (color_buf * 255).clip(0, 255).astype(np.uint8)
     depth_img = depth_buf.copy()
     depth_img[np.isinf(depth_img)] = 0.0

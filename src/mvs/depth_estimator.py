@@ -53,7 +53,19 @@ def compute_depth_map(img_i: np.ndarray, img_j: np.ndarray,
     gray_i = cv2.cvtColor(rect_i, cv2.COLOR_BGR2GRAY)
     gray_j = cv2.cvtColor(rect_j, cv2.COLOR_BGR2GRAY)
 
-    n_disp = 16 * 8   # must be divisible by 16
+    # Pick numDisparities to cover the expected disparity range:
+    #   disp = f_rect * baseline / Z   →   max disp at Z_min
+    R_rel    = R_j @ R_i.T
+    t_rel    = t_j - R_rel @ t_i
+    f_rect   = float(P1[0, 0])
+    baseline = float(np.linalg.norm(t_rel))
+    z_min    = 15.0
+    if baseline < 1e-3 or not np.isfinite(f_rect):
+        n_disp = 256
+    else:
+        max_disp_needed = f_rect * baseline / z_min
+        n_disp = int(np.ceil(max_disp_needed / 16.0)) * 16
+        n_disp = max(128, min(n_disp, 768))
     block  = 7
     sgbm = cv2.StereoSGBM_create(
         minDisparity=0,
@@ -61,16 +73,19 @@ def compute_depth_map(img_i: np.ndarray, img_j: np.ndarray,
         blockSize=block,
         P1=8  * 3 * block**2,
         P2=32 * 3 * block**2,
-        disp12MaxDiff=1,
-        uniquenessRatio=10,
-        speckleWindowSize=100,
-        speckleRange=2,
+        disp12MaxDiff=2,
+        uniquenessRatio=5,
+        speckleWindowSize=50,
+        speckleRange=4,
         preFilterCap=63,
         mode=cv2.STEREO_SGBM_MODE_SGBM_3WAY
     )
 
     disp = sgbm.compute(gray_i, gray_j).astype(np.float32) / 16.0
-    disp[disp <= 0] = np.nan
+    # Drop near-zero disparities (depth blows up to ∞, dominated by noise).
+    # Threshold = disparity that gives depth ≥ max plausible (200 m here).
+    disp_min = max(1.0, f_rect * baseline / 200.0)
+    disp[disp < disp_min] = np.nan
 
     # Reproject to 3D and extract Z component
     pts3d = cv2.reprojectImageTo3D(np.nan_to_num(disp), Q)
@@ -122,7 +137,7 @@ def estimate_all_depths(images: List[np.ndarray],
                 R_j = np.array(poses[j]["R"])
                 t_j = np.array(poses[j]["t"])
                 d = compute_depth_map(images[i], images[j], K, R_i, t_i, R_j, t_j)
-                if (d > 0).sum() > 1000:
+                if (d > 0).sum() > 200:
                     depths.append(d)
 
         if depths:
