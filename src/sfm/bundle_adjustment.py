@@ -11,6 +11,12 @@ from scipy.sparse import lil_matrix
 import cv2
 from .incremental import SfMReconstruction
 
+try:
+    from ._ba_cpp import run_bundle_adjustment_cpp as _run_ba_cpp
+    _HAS_CPP = True
+except ImportError:
+    _HAS_CPP = False
+
 
 def _pack(recon: SfMReconstruction):
     """Pack cameras and points into parameter vector."""
@@ -103,14 +109,32 @@ def _jac_sparsity(n_cams, n_pts, obs_cam, obs_pt):
 def run_bundle_adjustment(recon: SfMReconstruction, max_iter: int = 50) -> float:
     """
     Run BA. Returns mean reprojection error (pixels) after optimization.
-    Modifies recon in-place.
+    Modifies recon in-place. Uses C++ Schur-LM when available, scipy TRF otherwise.
     """
     K = recon.K
     params0, cam_ids, pt_ids, cam_idx, pt_idx = _pack(recon)
     n_cams = len(cam_ids)
     n_pts  = len(pt_ids)
-
     obs_cam, obs_pt, obs_xy = _build_obs_arrays(recon.observations, cam_idx, pt_idx)
+
+    if _HAS_CPP:
+        cam_params = params0[:n_cams*6].reshape(n_cams, 6)
+        pts3d_arr  = params0[n_cams*6:].reshape(n_pts, 3)
+        res = _run_ba_cpp(cam_params, pts3d_arr,
+                          obs_cam.astype(np.int32), obs_pt.astype(np.int32),
+                          obs_xy, K[0,0], K[1,1], K[0,2], K[1,2], max_iter)
+        new_cams = np.array(res["cam_params"])
+        new_pts  = np.array(res["pts3d"])
+        for i, ci in enumerate(cam_ids):
+            R, _ = cv2.Rodrigues(new_cams[i, :3])
+            recon.cameras[ci] = (R, new_cams[i, 3:])
+        for j, pid in enumerate(pt_ids):
+            recon.points3d[pid] = new_pts[j]
+        mean_err = float(res["mean_reproj_err"])
+        print(f"[BA/C++] {n_cams} cams, {n_pts} pts, {len(obs_cam)} obs -> "
+              f"{res['n_iters']} iters, mean reproj err {mean_err:.3f} px")
+        return mean_err
+
     sparsity = _jac_sparsity(n_cams, n_pts, obs_cam, obs_pt)
 
     def fun(p):

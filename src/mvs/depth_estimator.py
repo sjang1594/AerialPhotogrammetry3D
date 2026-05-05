@@ -7,6 +7,12 @@ from typing import List, Tuple, Dict
 import json
 import os
 
+try:
+    from ._depth_cpp import estimate_all_depths_parallel as _estimate_parallel
+    _HAS_CPP = True
+except ImportError:
+    _HAS_CPP = False
+
 
 def _rectify_pair(img_i: np.ndarray, img_j: np.ndarray,
                   K: np.ndarray,
@@ -120,7 +126,11 @@ def estimate_all_depths(images: List[np.ndarray],
     """
     For each image, fuse depth from `neighbors` adjacent images.
     Returns list of depth maps (H×W float32).
+    Uses C++ threadpool when available, sequential fallback otherwise.
     """
+    if _HAS_CPP:
+        return list(_estimate_parallel(images, poses, compute_depth_map, neighbors))
+
     K = np.array(poses[0]["K"])
     n = len(images)
     depth_maps = []
